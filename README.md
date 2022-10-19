@@ -11,9 +11,8 @@ finite mixtures of parametric frailty models with random covariates.
 Possible baseline hazards: exponential, Weibull, inverse Weibull
 (Fréchet), Gompertz, lognormal, log-skew-normal, and loglogistic.
 Possible Frailty distributions: gamma, positive stable, inverse Gaussian
-and lognormal. Heavily relies on the
-[parfm](https://cran.r-project.org/web/packages/parfm/index.html) R
-package.
+and lognormal. Heavily relies on the forked version of
+[parfm](https://github.com/AndreaCappozzo/parfm) R package.
 
 ## Installation
 
