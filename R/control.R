@@ -2,11 +2,13 @@
 control_EM <- function(itermax = 1000,
                        tol = 1e-08,
                        err = .Machine$double.xmax / 2,
-                       tol_zero_var = sqrt(.Machine$double.eps)) {
+                       tol_zero_var = sqrt(.Machine$double.eps),
+                       E_step_update = "classification") { # E_step_update can be either classification (CEM) or stochastic (SEM)
   list(
     itermax = itermax,
     tol = tol,
-    err = err
+    err = err,
+    E_step_update = E_step_update
   )
 }
 
