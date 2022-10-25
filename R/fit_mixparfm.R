@@ -6,7 +6,7 @@ fit_mixparfm <-
            grouping_variable = NULL,
            strata = NULL,
            X_gaussian_variables = NULL,
-           X_multinomial_variables = NULL, # FIXME not yet implemented
+           X_multinomial_variables = NULL,
            # modelXnorm = "VVV", # FIXME think if we want parsimonious covariance structures for continuous covariates
            data,
            baseline = c(
@@ -31,14 +31,41 @@ fit_mixparfm <-
         ")"
       )))
     }
-
+    N <- nrow(data)
     # Retrieve marginal variables
     # Continous covariates
-    if(!is.null(X_gaussian_variables)){
+    is_X_gaussian <- !is.null(X_gaussian_variables)
+    is_X_multinomial <- !is.null(X_multinomial_variables)
+    if(is_X_gaussian){
       X_gaussian <-   data[,X_gaussian_variables]
-      mclust_model_name <- ifelse(length(X_gaussian_variables)==1,"V","VVV")
+      p_gaussian <- length(X_gaussian_variables)
+      mclust_model_name <- ifelse(p_gaussian==1,"V","VVV")
+    } else{
+      # if no continuous random covariates are modeled, the associated loglik contribution is set to 0 and will stay like this
+      # throughout the algorithm
+      X_gaussian_log_density <- 0
+      log_density_X_gaussian_g <- 0
+      n_par_X_gaussian <- 0
     }
 
+    if(is_X_multinomial){
+      X_multinomial <-   data[,X_multinomial_variables]
+
+      p_multinomial <- length(X_multinomial_variables) # the number of variables modeled independently via multinomial dist (also denoted with M hereafter)
+      C_M_vec <- apply(X_multinomial, 2, function(X_mult_col) length(unique(X_mult_col)))
+      X_multinomial_params <- vector(mode = "list",length = p_multinomial) # container for the C_m x G matrices of probabilities of variable m
+      # C_m is the # of categories for variable m, m=1,...M aka p_multinomial (see notation in Section 3 of Variable selection for latent class analysis with application to low back pain diagnosis Fop et al)
+      # I need to store them in a list since C_m (the total # of categories) may differ for the p_multinomial variables
+      for (m in 1:p_multinomial) {
+        X_multinomial_params[[m]] <- matrix(nrow = C_M_vec[m], ncol = G)
+      }
+    } else{
+      # if no multinomial random covariates are modeled, the associated loglik contribution is set to 0 and will stay like this
+      # throughout the algorithm
+      X_multinomial_log_density <- 0
+      log_density_X_multinomial_g <- 0
+      n_par_X_multinomial <- 0
+    }
 
 
     # EM controls
@@ -101,11 +128,25 @@ fit_mixparfm <-
           method = method
         )
       parfm_params[[g]] <- attributes(fit_parfm_g_list[[g]])$estim_par
+
+      if (is_X_multinomial) {
+        X_multinomial_g <- X_multinomial[class_init == g,]
+        for (m in 1:p_multinomial) {
+          tab_X_multinomial_gm <- table(X_multinomial_g[,m])
+          X_multinomial_params[[m]][,g] <- tab_X_multinomial_gm/sum(tab_X_multinomial_gm)
+        }
+      }
     }
 
-    # X_gaussian_params_flexCWM  <- flexCWM:::.PX_norm(colXn=ncol(X_gaussian),Xnorm=X_gaussian,modelXnorm="VVV",z=z_init,k=G,n=nrow(data),eps=10e-6)
-    # mclust::covw(X=X_gaussian,Z=z_init, normalize = FALSE)
-    X_gaussian_params  <- mclust::mstep(data = X_gaussian, z = z_init,modelName = mclust_model_name)
+    # 3 ways to compute the same quantities
+    # X_gaussian_params  <- flexCWM:::.PX_norm(colXn=ncol(X_gaussian),Xnorm=X_gaussian,modelXnorm="VVV",z=z_init,k=G,n=nrow(data),eps=10e-6)
+    # X_gaussian_params <- mclust::covw(X=X_gaussian,Z=z_init, normalize = FALSE)
+    if (is_X_gaussian) {
+      X_gaussian_params  <-
+        mclust::mstep(data = X_gaussian,
+                      z = z_init,
+                      modelName = mclust_model_name)
+    }
 
     while (crit) {
 
@@ -122,19 +163,25 @@ fit_mixparfm <-
             correct = correct,
             transform = TRUE
           ))
+      if(is_X_gaussian) {
+        X_gaussian_log_density <- tryCatch(
+          do.call(mclust::cdens, c(
+            list(data = X_gaussian,
+                 logarithm = TRUE), X_gaussian_params
+          )),
+          error = function(e)
+            - Inf
+        )
+      }
 
-      X_gaussian_log_density <- tryCatch(
-        do.call(mclust::cdens, c(
-          list(data = X_gaussian,
-               logarithm = TRUE), X_gaussian_params
-        )),
-        error = function(e)
-          - Inf
-      )
+      if(is_X_multinomial) {
+
+        X_multinomial_log_density <- dmultinom(x = X_multinomial[,m],size = N,prob = X_multinomial_params[[m]])
+      }
 
       log_comp_mixture <-
         sweep(
-          (time_log_density+X_gaussian_log_density),
+          (time_log_density+X_gaussian_log_density+X_multinomial_log_density),
           MARGIN = 2,
           STATS = log(tau),
           FUN = "+"
@@ -185,14 +232,20 @@ fit_mixparfm <-
           )
         parfm_params[[g]] <- attributes(fit_parfm_g_list[[g]])$estim_par
 
-        # FIXME add MLE qualitative covariates
       }
-      # MLE for continuous covariates
-      X_gaussian_params  <-
-        mclust::mstep(data = X_gaussian,
-                      z = z,
-                      modelName = mclust_model_name)
+      if (is_X_gaussian) {
+        # MLE for continuous covariates
+        X_gaussian_params  <-
+          mclust::mstep(data = X_gaussian,
+                        z = z,
+                        modelName = mclust_model_name)
+      }
 
+      if (is_X_multinomial) {
+        # MLE for multinomial covariates
+        X_multinomial_params  <- "FIXME"
+
+      }
 
 # Log likelihood ----------------------------------------------
 
@@ -218,13 +271,23 @@ fit_mixparfm <-
             correct = correct
           )
       }
-      log_density_X_gaussian_g <-
-        colSums(do.call(mclust::cdens, c(
-          list(data = X_gaussian,
-               logarithm = TRUE), X_gaussian_params
-        ))*z)
+      if (is_X_gaussian) {
+        log_density_X_gaussian_g <-
+          colSums(do.call(mclust::cdens, c(
+            list(data = X_gaussian,
+                 logarithm = TRUE), X_gaussian_params
+          )) * z)
+      }
 
-      loglik <- sum(log_density_parfm_g+log_density_X_gaussian_g+log(tau))
+      if (is_X_multinomial) {
+        log_density_X_multinomial_g <- "FIXME"
+      }
+
+      loglik <-
+        sum(
+          log_density_parfm_g + log_density_X_gaussian_g + log_density_X_multinomial_g +
+            log(tau)
+        )
 
       # Check convergence
       err <- abs(loglik - loglik_prev) / (1 + abs(loglik))
@@ -253,12 +316,18 @@ fit_mixparfm <-
     parameters <-
       list(
         tau = tau,
-        AFT_parameters = AFT_parameters,
-        X_gaussian_parameters = list(
-          mu = X_gaussian_params$parameters$mean,
-          sigma = X_gaussian_params$parameters$variance$sigma
-        )
+        AFT_parameters = AFT_parameters
       )
+
+    if(is_X_gaussian) {
+      parameters$X_gaussian_parameters = list(mu = X_gaussian_params$parameters$mean,
+                                              sigma = X_gaussian_params$parameters$variance$sigma)
+    }
+
+    if(is_X_multinomial) {
+      parameters$X_multinomial_parameters = list("FIXME")
+    }
+
     frailty_effect_df_list <- vector(mode = "list",length = G)
 
     for(g in 1:G){
@@ -272,6 +341,19 @@ fit_mixparfm <-
     # if no frailty_effect is present for a given group in a cluster (i.e., no obs from that group belong to the g-th cluster) it returns NA
     colnames(frailty_effect)[1] <- grouping_variable # I manually specify the grouping variable name
 
+    # Compute bic
+
+    n_par_tau <- G - 1
+    n_par_parfm <- length(parameters$AFT_parameters)
+    if(is_X_gaussian) {
+      n_par_X_gaussian <-
+        mclust::nMclustParams(modelName = mclust_model_name, d = p_gaussian, G = G) -
+        n_par_tau # nMclustParams counts also the G-1 mixture weights, I subtract them otherwise I would count them twice
+    }
+    if (is_X_multinomial) {
+      n_par_X_multinomial <- "FIXME"
+    }
+    bic_final <- 2*loglik-(n_par_tau+n_par_parfm+n_par_X_gaussian+n_par_X_multinomial)*log(N)
 
     res <-
       list(
@@ -280,6 +362,7 @@ fit_mixparfm <-
         frailty_effect=frailty_effect,
         z = z,
         class = mclust::map(z),
+        bic=bic_final,
         baseline=baseline,
         frailty=frailty,
         loglik_vec = loglik_vec
