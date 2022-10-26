@@ -49,7 +49,7 @@ fit_mixparfm <-
     }
 
     if(is_X_multinomial){
-      X_multinomial <-   data[,X_multinomial_variables]
+      X_multinomial <-   data[,X_multinomial_variables,drop=FALSE]
 
       p_multinomial <- length(X_multinomial_variables) # the number of variables modeled independently via multinomial dist (also denoted with M hereafter)
       C_M_vec <- apply(X_multinomial, 2, function(X_mult_col) length(unique(X_mult_col)))
@@ -130,10 +130,11 @@ fit_mixparfm <-
       parfm_params[[g]] <- attributes(fit_parfm_g_list[[g]])$estim_par
 
       if (is_X_multinomial) {
-        X_multinomial_g <- X_multinomial[class_init == g,]
+        X_multinomial_g <- X_multinomial[class_init == g,,drop=FALSE]
         for (m in 1:p_multinomial) {
           tab_X_multinomial_gm <- table(X_multinomial_g[,m])
           X_multinomial_params[[m]][,g] <- tab_X_multinomial_gm/sum(tab_X_multinomial_gm)
+          rownames(X_multinomial_params[[m]]) <- names(tab_X_multinomial_gm)
         }
       }
     }
@@ -175,8 +176,12 @@ fit_mixparfm <-
       }
 
       if(is_X_multinomial) {
-
-        X_multinomial_log_density <- dmultinom(x = X_multinomial[,m],size = N,prob = X_multinomial_params[[m]])
+        X_multinomial_density_list <- lapply(1:p_multinomial, function(m)
+          sapply(1:G, function(g)
+            X_multinomial_params[[m]][, g][as.character(X_multinomial[, m])]))
+        X_multinomial_log_density <-
+          Reduce(f = "+",
+                 x = lapply(X_multinomial_density_list, log))
       }
 
       log_comp_mixture <-
@@ -207,7 +212,6 @@ fit_mixparfm <-
 
       data_g_list <- split(data,map_z)
 
-
 # M step ------------------------------------------------------------------
 
       tau <- colMeans(z)
@@ -232,19 +236,24 @@ fit_mixparfm <-
           )
         parfm_params[[g]] <- attributes(fit_parfm_g_list[[g]])$estim_par
 
+        if (is_X_multinomial) {
+          # MLE for categorical covariates
+          X_multinomial_g_list <- split(X_multinomial,map_z)
+          for (m in 1:p_multinomial) {
+            tab_X_multinomial_gm <- table(X_multinomial_g_list[[g]][,m])
+            X_multinomial_params[[m]][,g] <- tab_X_multinomial_gm/sum(tab_X_multinomial_gm)
+            rownames(X_multinomial_params[[m]]) <- names(tab_X_multinomial_gm)
+          }
+        }
+
       }
+
       if (is_X_gaussian) {
         # MLE for continuous covariates
         X_gaussian_params  <-
           mclust::mstep(data = X_gaussian,
                         z = z,
                         modelName = mclust_model_name)
-      }
-
-      if (is_X_multinomial) {
-        # MLE for multinomial covariates
-        X_multinomial_params  <- "FIXME"
-
       }
 
 # Log likelihood ----------------------------------------------
@@ -280,7 +289,13 @@ fit_mixparfm <-
       }
 
       if (is_X_multinomial) {
-        log_density_X_multinomial_g <- "FIXME"
+        X_multinomial_density_list <- lapply(1:p_multinomial, function(m)
+          sapply(1:G, function(g)
+            X_multinomial_params[[m]][, g][as.character(X_multinomial[, m])]))
+        X_multinomial_log_dens <-
+          (Reduce(f = "+",
+                 x = lapply(X_multinomial_density_list, log)))*z
+        log_density_X_multinomial_g <- colSums(X_multinomial_log_dens)
       }
 
       loglik <-
@@ -325,7 +340,7 @@ fit_mixparfm <-
     }
 
     if(is_X_multinomial) {
-      parameters$X_multinomial_parameters = list("FIXME")
+      parameters$X_multinomial_parameters = X_multinomial_params
     }
 
     frailty_effect_df_list <- vector(mode = "list",length = G)
@@ -351,7 +366,7 @@ fit_mixparfm <-
         n_par_tau # nMclustParams counts also the G-1 mixture weights, I subtract them otherwise I would count them twice
     }
     if (is_X_multinomial) {
-      n_par_X_multinomial <- "FIXME"
+      n_par_X_multinomial <- sum(sapply(X_multinomial_params, length)-G)
     }
     bic_final <- 2*loglik-(n_par_tau+n_par_parfm+n_par_X_gaussian+n_par_X_multinomial)*log(N)
 
