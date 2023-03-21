@@ -31,6 +31,9 @@ fit_mixparfm <-
         ")"
       )))
     }
+    data <- as.data.frame(unclass(data),stringsAsFactors = TRUE) # converts all character variables to factors
+    # (this automatically handles situations in which for some clusters not all the levels of the qualitative variable are observed)
+
     N <- nrow(data)
     # Retrieve marginal variables
     # Continous covariates
@@ -58,6 +61,7 @@ fit_mixparfm <-
       # I need to store them in a list since C_m (the total # of categories) may differ for the p_multinomial variables
       for (m in 1:p_multinomial) {
         X_multinomial_params[[m]] <- matrix(nrow = C_M_vec[m], ncol = G)
+        rownames(X_multinomial_params[[m]]) <- names(table(X_multinomial[,m]))
       }
     } else{
       # if no multinomial random covariates are modeled, the associated loglik contribution is set to 0 and will stay like this
@@ -132,9 +136,10 @@ fit_mixparfm <-
       if (is_X_multinomial) {
         X_multinomial_g <- X_multinomial[class_init == g,,drop=FALSE]
         for (m in 1:p_multinomial) {
-          tab_X_multinomial_gm <- table(X_multinomial_g[,m])
+          tab_X_multinomial_gm <- table(factor(X_multinomial_g[,m],levels = rownames(X_multinomial_params[[m]])))
+          # this handles the case in which for some levels
+          # of the qualitative variable there are 0 entries in cluster g
           X_multinomial_params[[m]][,g] <- tab_X_multinomial_gm/sum(tab_X_multinomial_gm)
-          rownames(X_multinomial_params[[m]]) <- names(tab_X_multinomial_gm)
         }
       }
     }
@@ -240,9 +245,8 @@ fit_mixparfm <-
           # MLE for categorical covariates
           X_multinomial_g_list <- split(X_multinomial,map_z)
           for (m in 1:p_multinomial) {
-            tab_X_multinomial_gm <- table(X_multinomial_g_list[[g]][,m])
+            tab_X_multinomial_gm <- table(factor(X_multinomial_g_list[[g]][,m],levels = rownames(X_multinomial_params[[m]])))
             X_multinomial_params[[m]][,g] <- tab_X_multinomial_gm/sum(tab_X_multinomial_gm)
-            rownames(X_multinomial_params[[m]]) <- names(tab_X_multinomial_gm)
           }
         }
 
@@ -295,7 +299,10 @@ fit_mixparfm <-
         X_multinomial_log_dens <-
           (Reduce(f = "+",
                  x = lapply(X_multinomial_density_list, log)))*z
-        log_density_X_multinomial_g <- colSums(X_multinomial_log_dens)
+        X_multinomial_log_dens_no_Nan <- ifelse(is.nan(X_multinomial_log_dens),no = X_multinomial_log_dens,yes=0)
+        # this handles the case in which for some levels
+        # of the qualitative variable there are 0 entries in cluster g
+        log_density_X_multinomial_g <- colSums(X_multinomial_log_dens_no_Nan)
       }
 
       loglik <-
@@ -380,6 +387,7 @@ fit_mixparfm <-
         bic=bic_final,
         baseline=baseline,
         frailty=frailty,
+        fit_parfm= fit_parfm_g_list, # #FIXME add droplevels + formula_g a list of dimension G containing the estimated parametric frailty models in the G clusters. Useful for assessing significance
         loglik_vec = loglik_vec
       )
 
