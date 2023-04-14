@@ -350,18 +350,26 @@ fit_mixparfm <-
       parameters$X_multinomial_parameters = X_multinomial_params
     }
 
-    frailty_effect_df_list <- vector(mode = "list",length = G)
+    if(frailty=="none") {
+      # in case no frailty is considered simply return NULL for frailty_effect (this is necessary to prevent errors in the call to predict.parfm)
+      frailty_effect <- NULL
+    } else{
+      frailty_effect_df_list <- vector(mode = "list", length = G)
 
-    for(g in 1:G){
-      # all this mess is done as we may have some clusters for which no obs fall within a given group, and I want to keep them all
-      frailty_g <- predict.parfm(fit_parfm_g_list[[g]])
-      frailty_effect_df_list[[g]] <- data.frame(group = attributes(frailty_g)$names, frailty = c(frailty_g))
-      colnames(frailty_effect_df_list[[g]])[2] <- g
+      for (g in 1:G) {
+        # all this mess is done as we may have some clusters for which no obs fall within a given group, and I want to keep them all
+        frailty_g <- predict.parfm(fit_parfm_g_list[[g]])
+        frailty_effect_df_list[[g]] <-
+          data.frame(group = attributes(frailty_g)$names,
+                     frailty = c(frailty_g))
+        colnames(frailty_effect_df_list[[g]])[2] <- g
+      }
+
+      frailty_effect = plyr::join_all(frailty_effect_df_list, by = "group", type = "full")
+      # if no frailty_effect is present for a given group in a cluster (i.e., no obs from that group belong to the g-th cluster) it returns NA
+      colnames(frailty_effect)[1] <-
+        grouping_variable # I manually specify the grouping variable name
     }
-
-    frailty_effect=plyr::join_all(frailty_effect_df_list,by = "group",type = "full")
-    # if no frailty_effect is present for a given group in a cluster (i.e., no obs from that group belong to the g-th cluster) it returns NA
-    colnames(frailty_effect)[1] <- grouping_variable # I manually specify the grouping variable name
 
     # Compute bic
 
