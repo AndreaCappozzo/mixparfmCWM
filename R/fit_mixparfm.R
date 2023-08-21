@@ -305,10 +305,12 @@ fit_mixparfm <-
         log_density_X_multinomial_g <- colSums(X_multinomial_log_dens_no_Nan)
       }
 
+      n_g <- colSums(z)
+
       loglik <-
         sum(
           log_density_parfm_g + log_density_X_gaussian_g + log_density_X_multinomial_g +
-            log(tau)
+            log(tau)*n_g
         )
 
       # Check convergence
