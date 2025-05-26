@@ -4,6 +4,7 @@
 # mixparfmCWM
 
 <!-- badges: start -->
+
 <!-- badges: end -->
 
 The goal of mixparfmCWM is to provide a flexible framework for fitting
@@ -22,4 +23,14 @@ You can install the development version of mixparfmCWM from
 ``` r
 # install.packages("devtools")
 devtools::install_github("AndreaCappozzo/mixparfmCWM")
+```
+
+Note: for the mixparfmCWM package to function correctly, the development
+version of parfm—which has been slightly modified and extended to
+address the specific challenges of our framework—is required. You can
+install the development version of parfm using the following command:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("AndreaCappozzo/parfm")
 ```
