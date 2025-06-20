@@ -22,7 +22,7 @@ fit_mixparfm <-
            frailty   = c("none", "gamma", "ingau", "possta",
                          "lognormal", "loglogistic"),
            control_EM_algorithm = control_EM(),
-           control_parfm=control_parfm()) {
+           control_parfm_algorithm =control_parfm()) {
 
     if (missing(data)) {
       data <- eval(parse(text = paste(
@@ -79,13 +79,13 @@ fit_mixparfm <-
     E_step_update <- control_EM_algorithm$E_step_update
 
     # parfm controls
-    inip = control_parfm$inip
-    iniFpar = control_parfm$iniFpar
-    method = control_parfm$method
-    maxit = control_parfm$maxit
-    Fparscale = control_parfm$Fparscale
-    showtime = control_parfm$showtime
-    correct = control_parfm$correct
+    inip = control_parfm_algorithm$inip
+    iniFpar = control_parfm_algorithm$iniFpar
+    method = control_parfm_algorithm$method
+    maxit = control_parfm_algorithm$maxit
+    Fparscale = control_parfm_algorithm$Fparscale
+    showtime = control_parfm_algorithm$showtime
+    correct = control_parfm_algorithm$correct
 
     # While loop controls
     iter <- 0
