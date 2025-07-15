@@ -20,6 +20,8 @@ knitr::opts_chunk$set(
 
 The goal of mixparfmCWM is to provide a flexible framework for fitting finite mixtures of parametric frailty models with random covariates. Possible baseline hazards: exponential, Weibull, inverse Weibull (Fréchet), Gompertz, lognormal, log-skew-normal, and loglogistic. Possible Frailty distributions: gamma, positive stable, inverse Gaussian and lognormal. Heavily relies on the forked version of [parfm](https://github.com/AndreaCappozzo/parfm) R package.
 
+This repository is associated with the paper *Cluster-weighted modeling of lifetime hierarchical data for profiling COVID-19 heart failure patients (2025+)* by Caldera, Cappozzo, Masci, Forlani, Antonelli, Leoni, Paganoni, Ieva.
+
 ## Installation
 
 You can install the development version of mixparfmCWM from [GitHub](https://github.com/) with:
