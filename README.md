@@ -18,7 +18,7 @@ and lognormal. Heavily relies on the forked version of
 This repository is associated with the paper *Cluster-weighted modeling
 of lifetime hierarchical data for profiling COVID-19 heart failure
 patients (2025+)* by Caldera, Cappozzo, Masci, Forlani, Antonelli,
-Leoni, Paganoni, Ieva.
+Leoni, Paganoni, Ieva. <https://arxiv.org/abs/2507.12230>
 
 ## Installation
 
