@@ -4,12 +4,18 @@
 \name{mixparfmCWM-package}
 \alias{mixparfmCWM}
 \alias{mixparfmCWM-package}
-\title{mixparfmCWM: What the Package Does (One Line, Title Case)}
+\title{mixparfmCWM: Finite Mixtures of Parametric Frailty Models with Random Covariates}
 \description{
-What the package does (one paragraph).
+Provides a flexible framework for fitting finite mixtures of parametric frailty models with random covariates. Supports multiple baseline hazards (exponential, Weibull, inverse Weibull, Gompertz, lognormal, log-skew-normal, and loglogistic) and frailty distributions (gamma, positive stable, inverse Gaussian, and lognormal). Implements cluster-weighted modeling for profiling heterogeneous survival data with hierarchical structure.
 }
 \author{
-\strong{Maintainer}: First Last \email{first.last@example.com} (\href{https://orcid.org/YOUR-ORCID-ID}{ORCID})
+\strong{Maintainer}: Andrea Cappozzo \email{andrea.cappozzo@unicatt.it} (\href{https://orcid.org/0000-0001-9348-710X}{ORCID})
+
+Authors:
+\itemize{
+  \item Chiara Masci \email{chiara.masci@unimi.it} (\href{https://orcid.org/0000-0002-9208-3194}{ORCID})
+  \item Luca Caldera \email{luca.caldera@polimi.it} (\href{https://orcid.org/0009-0001-8549-4104}{ORCID})
+}
 
 }
 \keyword{internal}

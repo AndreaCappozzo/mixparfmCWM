@@ -1,16 +1,27 @@
 Package: mixparfmCWM
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
+Title: Finite Mixtures of Parametric Frailty Models with Random Covariates
+Version: 0.0.1
 Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
+    c(person("Andrea", "Cappozzo", , "andrea.cappozzo@unicatt.it", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0001-9348-710X")),
+      person("Chiara", "Masci", , "chiara.masci@unimi.it", role = c("aut"),
+           comment = c(ORCID = "0000-0002-9208-3194")),
+      person("Luca", "Caldera", , "luca.caldera@polimi.it", role = c("aut"),
+           comment = c(ORCID = "0009-0001-8549-4104")))
+Description: Provides a flexible framework for fitting finite mixtures of 
+    parametric frailty models with random covariates. Supports multiple baseline 
+    hazards (exponential, Weibull, inverse Weibull, Gompertz, lognormal, 
+    log-skew-normal, and loglogistic) and frailty distributions (gamma, positive 
+    stable, inverse Gaussian, and lognormal). Implements cluster-weighted modeling 
+    for profiling heterogeneous survival data with hierarchical structure.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.3
 Imports: 
     mclust,
     parfm,
     plyr,
     survival
+
+    
