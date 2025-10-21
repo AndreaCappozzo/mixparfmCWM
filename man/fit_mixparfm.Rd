@@ -36,7 +36,7 @@ This variable identifies the groups for which frailty effects are estimated. If 
 no frailty structure is assumed.}
 
 \item{strata}{Character string specifying the stratification variable name, or NULL
-for no stratification. Default is NULL.}
+for no stratification. Default is NULL. (Not used at the moment)}
 
 \item{X_gaussian_variables}{Character vector specifying names of continuous covariates
 to be modeled as cluster-weighted (random) via Gaussian distributions. If NULL
