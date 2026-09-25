@@ -14,8 +14,8 @@ fit_mixparfm(
   X_multinomial_variables = NULL,
   data,
   baseline = c("weibull", "inweibull", "frechet", "exponential", "gompertz",
-    "loglogistic", "lognormal", "logskewnormal"),
-  frailty = c("none", "gamma", "ingau", "possta", "lognormal", "loglogistic"),
+    "loglogistic", "lognormal"),
+  frailty = c("none", "gamma", "ingau"),
   control_EM_algorithm = control_EM(),
   control_parfm_algorithm = control_parfm()
 )
@@ -23,20 +23,24 @@ fit_mixparfm(
 \arguments{
 \item{formula}{A formula specifying the survival model, with a \code{Surv} object on the
 left-hand side and covariates on the right-hand side, e.g.,
-\code{Surv(time, status) ~ x1 + x2}.}
+\code{Surv(time, status) ~ x1 + x2}. Only right-censored responses are
+supported; left-truncated (counting-process) \code{Surv} objects raise an error.}
 
 \item{G}{Integer. Number of mixture components (clusters) to fit.}
 
 \item{class_init}{Integer vector of length \code{nrow(data)} specifying initial cluster
-assignments. Each element should be an integer between 1 and \code{G}.}
+assignments. Each element should be an integer between 1 and \code{G}. Used for the
+first start; further starts (see \code{n_start} in \code{\link{control_EM}}) use
+random partitions.}
 
 \item{grouping_variable}{Character string specifying the name of the grouping variable
 in \code{data} that defines the hierarchical structure (e.g., hospital ID, family ID).
-This variable identifies the groups for which frailty effects are estimated. If NULL,
-no frailty structure is assumed.}
+This variable identifies the groups for which frailty effects are estimated. Required
+(not NULL) unless \code{frailty = "none"}.}
 
 \item{strata}{Character string specifying the stratification variable name, or NULL
-for no stratification. Default is NULL. (Not used at the moment)}
+for no stratification. Default is NULL. Stratified models are currently not supported
+and a non-NULL value raises an error.}
 
 \item{X_gaussian_variables}{Character vector specifying names of continuous covariates
 to be modeled as cluster-weighted (random) via Gaussian distributions. If NULL
@@ -54,64 +58,91 @@ If NULL (default), categorical covariates are treated as fixed.}
 \item{\code{"weibull"}}{Weibull distribution (default)}
 \item{\code{"exponential"}}{Exponential distribution}
 \item{\code{"inweibull"}}{Inverse Weibull distribution}
-\item{\code{"frechet"}}{Fréchet distribution}
+\item{\code{"frechet"}}{Fréchet distribution (same as \code{"inweibull"})}
 \item{\code{"gompertz"}}{Gompertz distribution}
 \item{\code{"loglogistic"}}{Log-logistic distribution}
 \item{\code{"lognormal"}}{Log-normal distribution}
-\item{\code{"logskewnormal"}}{Log-skew-normal distribution}
 }}
 
 \item{frailty}{Character string specifying the frailty distribution. Options are:
 \describe{
 \item{\code{"none"}}{No frailty (independence model)}
-\item{\code{"gamma"}}{Gamma frailty (default)}
-\item{\code{"ingau"}}{Inverse Gaussian frailty}
-\item{\code{"possta"}}{Positive stable frailty}
-\item{\code{"lognormal"}}{Log-normal frailty}
-\item{\code{"loglogistic"}}{Log-logistic frailty}
+\item{\code{"gamma"}}{Gamma frailty with mean 1 and variance theta (default)}
+\item{\code{"ingau"}}{Inverse Gaussian frailty with mean 1 and variance theta}
 }}
 
-\item{control_EM_algorithm}{A list of control parameters for the EM algorithm,
-as returned by \code{\link{control_EM}}. Default is \code{control_EM()}.}
+\item{control_EM_algorithm}{A list of control parameters for the ICM-CEM
+algorithm, as returned by \code{\link{control_EM}}. Default is \code{control_EM()}.}
 
-\item{control_parfm_algorithm}{A list of control parameters for fitting the
-parametric frailty models, as returned by \code{\link{control_parfm}}.
+\item{control_parfm_algorithm}{A list of control parameters for the component-wise
+parametric frailty fits, as returned by \code{\link{control_parfm}}.
 Default is \code{control_parfm()}.}
 }
 \value{
-An object of class \code{mixparfm} (a list) with components:
-\item{loglik}{Final log-likelihood value.}
+A list with components:
+\item{loglik}{Final classification log-likelihood.}
+\item{classification_loglik}{Final classification log-likelihood (same as
+\code{loglik}; the name is kept to be explicit about the optimized criterion).}
 \item{parameters}{A list containing:
 \describe{
 \item{\code{tau}}{Vector of mixing proportions (length \code{G}).}
-\item{\code{AFT_parameters}}{Matrix of AFT model parameters (baseline and
-regression coefficients) with one column per mixture component.}
+\item{\code{AFT_parameters}}{Matrix of natural-scale parameters (frailty
+variance, baseline and regression coefficients) with one column per
+mixture component.}
 \item{\code{X_gaussian_parameters}}{List with \code{mu} (means) and
 \code{sigma} (covariances) for Gaussian cluster-weighted covariates
 (only present if \code{X_gaussian_variables} is not NULL).}
 \item{\code{X_multinomial_parameters}}{List of probability matrices for
-categorical cluster-weighted covariates (only present if
-\code{X_multinomial_variables} is not NULL).}
+categorical cluster-weighted covariates
+(only present if \code{X_multinomial_variables} is not NULL).}
 }
 }
-\item{frailty_effect}{Data frame with estimated frailty effects for each group
-and mixture component (NULL if \code{frailty = "none"}).}
-\item{frailty_var_effect}{Data frame with variances of frailty effects
+\item{frailty_effect}{Data frame with posterior means of the frailty for each group
+and mixture component (NULL if \code{frailty = "none"}); groups with no patient
+assigned to a component have NA entries.}
+\item{frailty_var_effect}{Data frame with posterior variances of the frailty effects
 (NULL if \code{frailty = "none"}).}
-\item{z}{Matrix of posterior probabilities of cluster membership (N x G).}
-\item{class}{Vector of MAP cluster assignments (length N).}
-\item{bic}{Bayesian Information Criterion value.}
+\item{z}{Matrix (N x G) of hard cluster-membership indicators.}
+\item{class}{Vector of hard cluster assignments (length N).}
+\item{bic}{Classification BIC, see Details.}
+\item{classification_bic}{Same as \code{bic}.}
 \item{baseline}{The baseline hazard distribution used.}
 \item{frailty}{The frailty distribution used.}
-\item{fit_parfm}{List of length \code{G} containing the fitted \code{parfm}
-objects for each mixture component.}
-\item{loglik_vec}{Vector of log-likelihood values at each EM iteration.}
+\item{fit_parfm}{List of length \code{G} with one internal fit summary per component
+(estimates on the optimizer scale, component log-likelihood, convergence code,
+optimizer message and frailty-floor flag). These are plain lists, not
+\code{parfm} objects.}
+\item{loglik_vec}{Classification log-likelihood trace, one value per iteration.}
+\item{classification_loglik_vec}{Same as \code{loglik_vec}.}
+\item{cem_trace}{Data frame with the objective before the ICM
+classification step, after it, and after the M-step, at every iteration.}
+\item{objective_name}{Name of the optimized objective.}
+\item{algorithm}{Name of the fitted algorithm.}
+\item{converged}{Logical convergence indicator based on the configured tolerance.}
+\item{stopping_reason}{Character description of why the algorithm stopped.}
+\item{n_iter}{Number of completed iterations of the selected start.}
+\item{reached_itermax}{Logical indicator for stopping at the iteration limit.}
+\item{final_relative_change}{Final relative change of the classification
+log-likelihood.}
+\item{tol_zero_var}{Gaussian covariance eigenvalue tolerance used by the fit.}
+\item{n_start}{Number of starts requested.}
+\item{selected_start}{Index of the start attaining the highest classification
+log-likelihood.}
+\item{start_summary}{Data frame with the final objective, number of iterations,
+convergence flag, error message, degeneracy flag and degeneracy reason
+of every start. Degenerate starts are excluded from the selection.}
+\item{n_degenerate_starts}{Number of starts that ended in degenerate
+solutions and were excluded from the selection.}
+\item{n_m_step_rejections}{Number of M-step candidates rejected because they
+decreased the component survival log-likelihood.}
+\item{theta_floor}{The frailty-variance floor used in the component fits.}
 }
 \description{
 Fits finite mixtures of parametric frailty models with possibly random (cluster-weighted)
-covariates using an EM-type algorithm. The model accommodates hierarchical survival data
-with a grouping structure (e.g., patients within hospitals) and allows for heterogeneity
-across latent subpopulations.
+covariates using an ICM-CEM algorithm: a classification EM (CEM) algorithm whose
+classification step is carried out by iterated conditional modes (ICM). The model accommodates
+hierarchical survival data with a grouping structure (e.g., patients within hospitals)
+and allows for heterogeneity across latent subpopulations.
 }
 \details{
 This function implements a finite mixture of parametric frailty models suitable for
@@ -123,98 +154,128 @@ to account for within-group correlation.
 distributions can vary across mixture components.
 }
 
-The EM algorithm alternates between:
+The estimation criterion is the classification (complete-data) log-likelihood.
+Because the integrated shared-frailty term couples the labels of patients in the
+same group-by-component cell, the classification log-likelihood does not separate
+across patients, and the usual C-step of CEM—assigning each unit by its marginal
+posterior probability—is not available. The model is therefore fitted with an
+\strong{ICM-CEM} algorithm: a classification EM (CEM) algorithm (Celeux & Govaert,
+1992) whose classification step is carried out by iterated conditional modes
+(ICM; Besag, 1986). Each label is set in turn to the mode of its full conditional
+distribution given the current labels of all other patients and the current
+parameter estimates, and the new label is used immediately. The ICM-CEM algorithm
+alternates between:
 \itemize{
-\item \strong{E-step}: Computing posterior probabilities of cluster membership
-\item \strong{M-step}: Updating mixture component parameters by fitting separate
-parametric frailty models via the \code{parfm} package
+\item \strong{ICM classification step}: Updating one hard assignment at a
+time. Each update recomputes the joint group-by-component shared-frailty
+contribution of both the source and the destination cells, so every accepted move
+increases the classification log-likelihood.
+\item \strong{M-step}: Updating mixture component parameters. Mixing proportions,
+Gaussian and multinomial covariate parameters have closed-form updates given the
+hard partition; the survival parameters of each component are refitted by
+numerical maximization of the same component survival log-likelihood used by the
+classification step. Refits are warm-started from the current estimates, and a
+candidate that does not improve a component's contribution is rejected (the
+previous estimates are retained).
 }
 
-The function uses either Classification EM (CEM) with hard assignments or
-Stochastic EM (SEM) with probabilistic assignments, as specified in
-\code{control_EM_algorithm}.
+Every ICM update and every block of the M-step leaves the classification
+log-likelihood non-decreasing, so ICM-CEM is a monotone block-coordinate ascent
+algorithm that converges to a partial optimum: a partition that no single
+reassignment improves at the final parameters, together with parameters that locally
+maximise the classification log-likelihood given that partition. As with any
+CEM-type algorithm the solution is local, so multiple random starts are used.
+
+The \code{bic} element is a \emph{classification} BIC: \code{2 * loglik - d * log(N)}
+with the classification (not the observed-data marginal) log-likelihood and
+\code{d} the total number of parameters. As such it behaves like an ICL-type criterion
+and tends to favour fewer, well-separated components; comparisons across \code{G},
+baselines or frailties are internally consistent, but it is not the Schwarz BIC of the
+marginal mixture likelihood.
+
+The ICM classification step is monotone but converges to a coordinate-wise
+local optimum, and its endpoint may depend on the visiting order; multiple random
+starts are therefore recommended (\code{n_start} in \code{\link{control_EM}}, default 5),
+and the reported fit is the one with the highest classification log-likelihood among
+the non-degenerate starts. The classification log-likelihood has degenerate boundary
+solutions (components with too few events, or with runaway survival parameters);
+starts ending in such solutions are flagged and excluded from the selection, and the
+flags are reported in \code{start_summary}. The event floor and the runaway-parameter
+threshold are controlled by \code{minimum_component_events} and
+\code{runaway_parameter_limit} in \code{\link{control_EM}}.
+
+The package fits the component-specific frailty models with its own optimizer
+(see \code{\link{control_parfm}}); it does not depend on the \code{parfm} package at
+runtime. The likelihood routines are adapted from parfm (GPL-2), which is why this
+package is distributed under GPL-2.
 }
 \note{
-\itemize{
-\item This package requires the modified \code{parfm} package available at
-\url{https://github.com/AndreaCappozzo/parfm}.
-\item Character variables in \code{data} are automatically converted to factors.
-\item The function handles cases where some factor levels may be absent in certain
-mixture components.
-}
+Character variables in \code{data} are automatically converted to factors. The
+function handles cases where some factor levels of the cluster-weighted categorical
+covariates are absent in certain mixture components.
 }
 \examples{
-\dontrun{
-# Simulate data (using frailtySurv package)
-library(frailtySurv)
-set.seed(46)
+set.seed(2026)
+# Simulate clustered survival data with two well-separated components
+dat_list <- list()
+true_class <- integer()
+for (g in 1:2) {
+  for (j in 1:6) {
+    # gamma frailty shared by the family, mean 1 and variance 0.5
+    m_j <- stats::rgamma(4, shape = 2, scale = 0.5)
+    t_ev <- ((-log(runif(4))) /
+      (m_j * c(0.4, 0.12)[g] * exp(c(0.3, 0.5)[g] * rnorm(4))))^(1 / c(1.3, 1.7)[g])
+    dat_list[[length(dat_list) + 1]] <- data.frame(
+      time = pmin(t_ev, 8), status = as.integer(t_ev <= 8),
+      x = rnorm(4),
+      Z1 = rnorm(4, c(-1.5, 1.5)[g]),
+      Z2 = rnorm(4, c(1, -1)[g]),
+      family = paste0("f", g, j)
+    )
+    true_class <- c(true_class, rep(g, 4))
+  }
+}
+dat <- do.call(rbind, dat_list)
 
-# Generate two subpopulations with different characteristics
-df1 <- genfrail(N = 10, K = 40, beta = c(2, 3),
-                frailty = "gamma", theta = 6,
-                covar.matrix = matrix(rnorm(400*2, c(2,3), c(1,2)), ncol=2),
-                Lambda_0 = function(t, lambda=0.2, rho=3) lambda*t^rho)
-
-df2 <- genfrail(N = 10, K = 50, beta = c(-2, -3),
-                frailty = "gamma", theta = 0.1,
-                covar.matrix = matrix(rnorm(500*2, c(4,5), c(2,1)), ncol=2),
-                Lambda_0 = function(t, lambda=0.2, rho=15) lambda*t^rho)
-
-df <- rbind(df1, df2)
-true_class <- rep(1:2, c(nrow(df1), nrow(df2)))
-
-# Initialize cluster assignments with some noise
-class_init <- true_class
-class_init[1:450] <- sample(1:2, 450, replace = TRUE, prob = c(0.8, 0.2))
-class_init[451:900] <- sample(1:2, 450, replace = TRUE, prob = c(0.2, 0.8))
-
-# Fit mixture model with fixed covariates
-fit_fixed <- fit_mixparfm(
-  formula = Surv(time, status) ~ Z1 + Z2,
+fit <- fit_mixparfm(
+  formula = survival::Surv(time, status) ~ x,
   G = 2,
-  data = df,
-  class_init = class_init,
+  class_init = true_class,
   grouping_variable = "family",
+  X_gaussian_variables = c("Z1", "Z2"),
+  data = dat,
   baseline = "weibull",
   frailty = "gamma",
-  control_EM_algorithm = control_EM(itermax = 50),
+  control_EM_algorithm = control_EM(itermax = 20, tol = 1e-3, n_start = 3),
   control_parfm_algorithm = control_parfm(maxit = 1000)
 )
 
-# Check convergence
-plot(fit_fixed$loglik_vec, type = "l",
-     xlab = "Iteration", ylab = "Log-likelihood")
+# Highest classification log-likelihood across the three starts
+fit$classification_loglik
+fit$selected_start
 
-# Fit mixture model with cluster-weighted covariates
-fit_cw <- fit_mixparfm(
-  formula = Surv(time, status) ~ Z1 + Z2,
-  G = 2,
-  data = df,
-  class_init = class_init,
-  grouping_variable = "family",
-  X_gaussian_variables = c("Z1", "Z2"),
-  baseline = "weibull",
-  frailty = "gamma",
-  control_EM_algorithm = control_EM(itermax = 50),
-  control_parfm_algorithm = control_parfm()
-)
+# Natural-scale parameters, one column per component
+fit$parameters$AFT_parameters
 
-# Compare classifications
-table(Estimated = fit_cw$class, True = true_class)
-
-# View parameter estimates
-fit_cw$parameters
-
-# View BIC
-fit_cw$bic
-}
+# Classification BIC
+fit$bic
 }
 \references{
+Besag, J. (1986). On the statistical analysis of dirty pictures.
+\emph{Journal of the Royal Statistical Society: Series B}, 48(3), 259-302.
+
 Caldera, Cappozzo, Masci, Forlani, Antonelli, Leoni, Paganoni, Ieva (2025+).
 Cluster-weighted modeling of lifetime hierarchical data for profiling COVID-19
 heart failure patients. \url{https://arxiv.org/abs/2507.12230}
+
+Celeux, G. & Govaert, G. (1992). A classification EM algorithm for clustering
+and two stochastic versions. \emph{Computational Statistics & Data Analysis},
+14(3), 315-332.
+
+Munda, M., Rotolo, F., Legrand, C. (2012). Parfm: parametric frailty models in R.
+\emph{Journal of Statistical Software}, 51(11), 1-30.
 }
 \seealso{
-\code{\link{control_EM}}, \code{\link{control_parfm}}, \code{\link[parfm]{parfm}},
+\code{\link{control_EM}}, \code{\link{control_parfm}},
 \code{\link[survival]{Surv}}
 }

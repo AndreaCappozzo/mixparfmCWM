@@ -6,7 +6,15 @@
 \alias{mixparfmCWM-package}
 \title{mixparfmCWM: Finite Mixtures of Parametric Frailty Models with Random Covariates}
 \description{
-Provides a flexible framework for fitting finite mixtures of parametric frailty models with random covariates. Supports multiple baseline hazards (exponential, Weibull, inverse Weibull, Gompertz, lognormal, log-skew-normal, and loglogistic) and frailty distributions (gamma, positive stable, inverse Gaussian, and lognormal). Implements cluster-weighted modeling for profiling heterogeneous survival data with hierarchical structure.
+Provides a flexible framework for fitting finite mixtures of parametric frailty models with random covariates. Supports multiple baseline hazards (exponential, Weibull, inverse Weibull, Gompertz, lognormal, and loglogistic) and frailty distributions (gamma and inverse Gaussian). Implements cluster-weighted modeling for profiling heterogeneous survival data with hierarchical structure. Estimation relies on an ICM-CEM algorithm: a classification EM (CEM) algorithm whose classification step is carried out by iterated conditional modes (ICM), preserving the group-level shared-frailty contribution of the classification likelihood. The baseline hazard and frailty likelihood routines are adapted from the parfm package (GPL-2).
+}
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/AndreaCappozzo/mixparfmCWM}
+  \item Report bugs at \url{https://github.com/AndreaCappozzo/mixparfmCWM/issues}
+}
+
 }
 \author{
 \strong{Maintainer}: Andrea Cappozzo \email{andrea.cappozzo@unicatt.it} (\href{https://orcid.org/0000-0001-9348-710X}{ORCID})

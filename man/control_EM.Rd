@@ -2,55 +2,107 @@
 % Please edit documentation in R/control.R
 \name{control_EM}
 \alias{control_EM}
-\title{Control Parameters for the EM Algorithm}
+\title{Control Parameters for the ICM-CEM Algorithm}
 \usage{
 control_EM(
   itermax = 1000,
   tol = 1e-08,
-  err = .Machine$double.xmax/2,
   tol_zero_var = sqrt(.Machine$double.eps),
+  objective_tolerance = 1e-07,
+  move_tolerance = 1e-09,
+  max_c_sweeps = 100L,
+  minimum_component_size = 1L,
+  minimum_component_events = NULL,
+  runaway_parameter_limit = 30,
+  n_start = 5L,
   E_step_update = "classification"
 )
 }
 \arguments{
-\item{itermax}{Integer. Maximum number of EM iterations. Default is 1000.}
+\item{itermax}{Integer. Maximum number of CEM iterations per start.
+Default is 1000.}
 
 \item{tol}{Numeric. Convergence tolerance for the relative change in
-log-likelihood. The algorithm stops when the relative change is smaller
-than \code{tol}. Default is 1e-08.}
+the classification log-likelihood. The algorithm stops when the
+relative change is smaller than \code{tol}. Default is 1e-08.}
 
-\item{err}{Numeric. Initial error value for the EM algorithm. Default is
-\code{.Machine$double.xmax / 2}.}
+\item{tol_zero_var}{Numeric. Tolerance for detecting degenerate
+covariance matrices of the Gaussian cluster-weighted covariates.
+Components whose covariance has an eigenvalue below this threshold
+produce an error for the corresponding start. Default is
+\code{sqrt(.Machine$double.eps)}.}
 
-\item{tol_zero_var}{Numeric. Tolerance for detecting zero variance components.
-Components with variance below this threshold may be considered degenerate.
-Default is \code{sqrt(.Machine$double.eps)}.}
+\item{objective_tolerance}{Numeric. Absolute tolerance used by the
+internal monotonicity checks of the classification log-likelihood.
+Default is 1e-7.}
 
-\item{E_step_update}{Character. Type of E-step update to use:
-\describe{
-\item{\code{"classification"}}{Classification EM (CEM) - uses hard assignments
-based on maximum a posteriori probability (default)}
-\item{\code{"stochastic"}}{Stochastic EM (SEM) - uses stochastic assignments
-by sampling from the posterior probabilities}
-}}
+\item{move_tolerance}{Numeric. Relative tolerance of the strict-
+improvement rule of the ICM classification step: a
+single-patient reassignment is accepted only if it improves the
+score by more than \code{move_tolerance * (1 + |score|)}. This
+keeps rounding-level "improvements" of the incrementally maintained
+cell sums from causing spurious moves or cycling. Default is 1e-9.}
+
+\item{max_c_sweeps}{Integer. Maximum number of sequential
+classification sweeps per CEM iteration. Default is 100.}
+
+\item{minimum_component_size}{Integer. Minimum number of patients per
+component enforced during the classification sweeps; the conditional
+step never moves a patient if that would leave the current component
+with fewer than this many patients. Default is 1, i.e. empty
+components are prevented.}
+
+\item{minimum_component_events}{Integer or NULL. Minimum number of
+events per component, enforced like \code{minimum_component_size}:
+the conditional step never moves a patient if that would leave the
+current component with fewer than this many events. This prevents
+zero-event (or near-zero-event) components, whose survival-parameter
+estimates run away to degenerate boundary solutions. NULL (default)
+means the number of survival parameters of one component (frailty
+variance, baseline and regression coefficients); 0 disables the
+constraint. The initial partition (\code{class_init}) must satisfy
+the constraint.}
+
+\item{runaway_parameter_limit}{Numeric. A component whose parameter
+vector on the optimizer scale (log frailty variance, transformed
+baseline parameters, regression coefficients) has any entry larger
+than this limit in absolute value is flagged as degenerate. Flagged
+starts are excluded from the multi-start selection and reported in
+\code{start_summary}. Default is 30; \code{Inf} disables the check.}
+
+\item{n_start}{Integer. Number of starts. The first start uses the
+partition supplied via the \code{class_init} argument of
+\code{\link{fit_mixparfm}}; the remaining ones are random partitions
+respecting \code{minimum_component_size} and
+\code{minimum_component_events}. The start attaining the
+highest classification log-likelihood among the non-degenerate ones
+is returned. Set the seed of the random number generator before
+calling for reproducibility. Default is 5.}
+
+\item{E_step_update}{Character. Only \code{"classification"} is
+accepted; the argument is retained for backward compatibility, and
+the stochastic (SEM) update of earlier versions is no longer
+available.}
 }
 \value{
-A list with components corresponding to the control parameters.
+A list containing the supplied algorithm controls.
 }
 \description{
-Auxiliary function for controlling the EM algorithm used in fitting finite
-mixtures of parametric frailty models. This function specifies convergence
-criteria and the type of E-step update.
+Auxiliary function for controlling the ICM-CEM algorithm (a
+classification EM algorithm whose classification step is carried out by
+iterated conditional modes) used in fitting finite mixtures of parametric
+frailty models. This function specifies convergence criteria,
+classification-step tolerances, and the number of random starts.
 }
 \examples{
 # Default control parameters
 control_EM()
 
-# Custom parameters for faster convergence testing
+# Faster convergence testing
 control_EM(itermax = 100, tol = 1e-05)
 
-# Using stochastic EM
-control_EM(E_step_update = "stochastic")
+# Multiple random starts with best-objective selection
+control_EM(itermax = 100, tol = 1e-05, n_start = 5)
 }
 \seealso{
 \code{\link{fit_mixparfm}}, \code{\link{control_parfm}}

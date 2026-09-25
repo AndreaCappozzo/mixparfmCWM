@@ -2,29 +2,34 @@
 % Please edit documentation in R/control.R
 \name{control_parfm}
 \alias{control_parfm}
-\title{Control Parameters for Parametric Frailty Model Fitting}
+\title{Control Parameters for the Component-Wise Frailty Model Fits}
 \usage{
 control_parfm(
   inip = NULL,
   iniFpar = NULL,
-  method = "nlminb",
+  method = c("nlminb", "Nelder-Mead", "BFGS"),
   maxit = 500,
-  Fparscale = 1,
-  showtime = FALSE,
-  correct = 0
+  theta_floor = 1e-04,
+  Fparscale = NULL,
+  showtime = NULL,
+  correct = NULL
 )
 }
 \arguments{
-\item{inip}{Numeric vector or NULL. Initial values for the baseline hazard
-parameters. If NULL (default), initial values are computed automatically
-by the \code{parfm} package.}
+\item{inip}{Numeric vector or NULL. Initial values on the optimizer
+scale for the baseline hazard parameters and the regression
+coefficients (the frailty parameter is supplied separately through
+\code{iniFpar}). If NULL (default), deterministic data-driven
+starting values are computed for each component.}
 
-\item{iniFpar}{Numeric or NULL. Initial value for the frailty parameter.
-If NULL (default), an initial value is computed automatically.}
+\item{iniFpar}{Numeric or NULL. Initial value for the frailty
+variance (natural scale). If NULL (default), 1 is used. Ignored when
+\code{frailty = "none"}.}
 
 \item{method}{Character. Optimization method to use:
 \describe{
-\item{\code{"nlminb"}}{Port's \code{nlminb} optimizer (default)}
+\item{\code{"nlminb"}}{Port's \code{nlminb} optimizer with box
+constraints (default)}
 \item{\code{"Nelder-Mead"}}{Nelder-Mead simplex method}
 \item{\code{"BFGS"}}{Quasi-Newton BFGS algorithm}
 }}
@@ -32,35 +37,34 @@ If NULL (default), an initial value is computed automatically.}
 \item{maxit}{Integer. Maximum number of iterations for the optimization
 algorithm. Default is 500.}
 
-\item{Fparscale}{Numeric. Scaling parameter for the frailty parameter in
-the optimization routine. Default is 1.}
+\item{theta_floor}{Numeric. Lower bound for the estimated frailty
+variance of each component. The bound protects the optimizer from
+the degenerate corner where the frailty variance collapses to zero;
+a warning is emitted when the bound is active in the final fit.
+Ignored when \code{frailty = "none"}. Default is 1e-4.}
 
-\item{showtime}{Logical. If TRUE, displays computation time for fitting
-each mixture component. Useful for diagnosing slow convergence. Default is FALSE.}
-
-\item{correct}{Numeric. Correction factor for the optimization. Default is 0.}
+\item{Fparscale, showtime, correct}{Legacy arguments of earlier versions
+of the package (which relied on \code{parfm}); they are accepted for
+backward compatibility and ignored.}
 }
 \value{
-A list with components corresponding to the control parameters.
+A list containing the supplied optimizer controls.
 }
 \description{
-Auxiliary function for controlling the optimization of parametric frailty models
-within each mixture component. These parameters are passed to the \code{parfm}
-package functions for fitting individual cluster-specific models.
+Auxiliary function for controlling the optimization of the
+component-specific parametric frailty models fitted in the M-step of
+the ICM-CEM algorithm.
 }
 \examples{
 # Default control parameters
 control_parfm()
 
 # Custom optimization settings with more iterations
-control_parfm(method = "BFGS", maxit = 1000)
+control_parfm(maxit = 1000)
 
-# With custom initial values and timing
-control_parfm(inip = c(0.5, 1.2), showtime = TRUE)
-
-# Using Nelder-Mead with increased iterations
-control_parfm(method = "Nelder-Mead", maxit = 2000)
+# Tighter floor on the frailty variance
+control_parfm(theta_floor = 1e-3)
 }
 \seealso{
-\code{\link{fit_mixparfm}}, \code{\link{control_EM}}, \code{\link[parfm]{parfm}}
+\code{\link{fit_mixparfm}}, \code{\link{control_EM}}
 }
