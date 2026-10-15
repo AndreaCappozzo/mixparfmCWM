@@ -1,11 +1,14 @@
 #' Fit Finite Mixtures of Parametric Frailty Models
 #'
 #' @description
-#' Fits finite mixtures of parametric frailty models with possibly random (cluster-weighted)
-#' covariates using an ICM-CEM algorithm: a classification EM (CEM) algorithm whose
-#' classification step is carried out by iterated conditional modes (ICM). The model accommodates
-#' hierarchical survival data with a grouping structure (e.g., patients within hospitals)
-#' and allows for heterogeneity across latent subpopulations.
+#' Fits finite mixtures of parametric shared frailty models with possibly random
+#' (cluster-weighted) covariates by maximizing the classification log-likelihood with
+#' the ICM-CEM (Iterated Conditional Modes-Classification Expectation Maximization)
+#' algorithm of Caldera et al. (2025+): a block-coordinate ascent procedure that
+#' alternates an ICM-type update of the hard cluster labels with component-wise parameter
+#' estimation. The model accommodates hierarchical survival data with a grouping
+#' structure (e.g., patients within hospitals) and allows for heterogeneity across latent
+#' subpopulations, with group-level frailty effects that are specific to each cluster.
 #'
 #' @param formula A formula specifying the survival model, with a \code{Surv} object on the
 #'   left-hand side and covariates on the right-hand side, e.g.,
@@ -15,7 +18,8 @@
 #' @param class_init Integer vector of length \code{nrow(data)} specifying initial cluster
 #'   assignments. Each element should be an integer between 1 and \code{G}. Used for the
 #'   first start; further starts (see \code{n_start} in \code{\link{control_EM}}) use
-#'   random partitions.
+#'   random partitions. In Caldera et al. (2025+) initial partitions are obtained with
+#'   the k-prototypes algorithm (Huang, 1998) applied to the covariates; see Details.
 #' @param grouping_variable Character string specifying the name of the grouping variable
 #'   in \code{data} that defines the hierarchical structure (e.g., hospital ID, family ID).
 #'   This variable identifies the groups for which frailty effects are estimated. Required
@@ -60,9 +64,17 @@
 #'   \item{parameters}{A list containing:
 #'     \describe{
 #'       \item{\code{tau}}{Vector of mixing proportions (length \code{G}).}
-#'       \item{\code{AFT_parameters}}{Matrix of natural-scale parameters (frailty
-#'         variance, baseline and regression coefficients) with one column per
-#'         mixture component.}
+#'       \item{\code{AFT_parameters}}{Matrix of natural-scale survival parameters with
+#'         one column per mixture component. Despite the historical name, these are the
+#'         parameters of the proportional-hazards shared frailty model described in
+#'         Details: the frailty variance \code{theta} (absent if \code{frailty = "none"}),
+#'         the baseline parameters (\code{lambda} for \code{"exponential"};
+#'         \code{rho}, \code{lambda} for \code{"weibull"}, \code{"inweibull"} and
+#'         \code{"frechet"}; \code{gamma}, \code{lambda} for \code{"gompertz"};
+#'         \code{mu}, \code{sigma} for \code{"lognormal"}, i.e. \eqn{\eta_g} and
+#'         \eqn{\nu_g} in Caldera et al.; \code{alpha}, \code{kappa} for
+#'         \code{"loglogistic"}), and the regression coefficients, named
+#'         \code{beta.} followed by the covariate name.}
 #'       \item{\code{X_gaussian_parameters}}{List with \code{mu} (means) and
 #'         \code{sigma} (covariances) for Gaussian cluster-weighted covariates
 #'         (only present if \code{X_gaussian_variables} is not NULL).}
@@ -78,7 +90,8 @@
 #'     (NULL if \code{frailty = "none"}).}
 #'   \item{z}{Matrix (N x G) of hard cluster-membership indicators.}
 #'   \item{class}{Vector of hard cluster assignments (length N).}
-#'   \item{bic}{Classification BIC, see Details.}
+#'   \item{bic}{BIC-type penalized classification likelihood criterion
+#'     \eqn{\mathrm{BIC}_{CL}}, see Details. Larger values are preferred.}
 #'   \item{classification_bic}{Same as \code{bic}.}
 #'   \item{baseline}{The baseline hazard distribution used.}
 #'   \item{frailty}{The frailty distribution used.}
@@ -112,64 +125,110 @@
 #'   \item{theta_floor}{The frailty-variance floor used in the component fits.}
 #'
 #' @details
-#' This function implements a finite mixture of parametric frailty models suitable for
-#' clustered survival data. The model extends standard mixture models by:
-#' \enumerate{
-#'   \item Incorporating a frailty (random effect) structure within each mixture component
-#'     to account for within-group correlation.
-#'   \item Allowing covariates to be cluster-specific (cluster-weighted), meaning their
-#'     distributions can vary across mixture components.
-#' }
+#' \strong{Model.} For patient \eqn{i} in group \eqn{j} (e.g., hospital), let
+#' \eqn{y_{ij}} be the right-censored survival time, \eqn{\delta_{ij}} the event
+#' indicator and \eqn{x_{ij} = (u_{ij}, v_{ij})} the covariates, where \eqn{u_{ij}}
+#' collects the continuous variables in \code{X_gaussian_variables} and \eqn{v_{ij}} the
+#' categorical variables in \code{X_multinomial_variables}. Following the
+#' cluster-weighted modeling framework, the joint density of the response and the random
+#' covariates is
+#' \deqn{p(y, x; \psi) = \sum_{g=1}^{G} \tau_g \, p(y \mid x; \gamma_g, \beta_g, \theta_g) \,
+#'   \phi(u; \mu_g, \Sigma_g) \, \xi(v; \pi_g),}
+#' where \eqn{\tau_g} are the mixing proportions, \eqn{\phi} is a multivariate Gaussian
+#' density with component-specific mean vector and unconstrained covariance matrix, and
+#' \eqn{\xi} is the product of independent multinomial distributions with
+#' component-specific probabilities. Within component \eqn{g}, the survival response
+#' follows a proportional-hazards shared frailty model,
+#' \deqn{h(y_{ij} \mid m_{jg}, x_{ij}) = h_0(y_{ij}; \gamma_g) \, m_{jg} \,
+#'   \exp(x_{ij}^\top \beta_g),}
+#' where \eqn{h_0(\cdot; \gamma_g)} is the parametric baseline hazard (\code{baseline}),
+#' \eqn{\beta_g} are the coefficients of the covariates on the right-hand side of
+#' \code{formula}, and \eqn{m_{jg}} is a frailty with unit mean and variance
+#' \eqn{\theta_g} (\code{frailty}). The frailty is specific to both the group and the
+#' component: a given group has a distinct frailty in each of the \eqn{G} components, so
+#' group-level effects may differ across latent subpopulations. The frailty is integrated
+#' out within each group-by-component cell, so the survival contribution of a cell
+#' depends jointly on all the patients of group \eqn{j} assigned to component \eqn{g}.
 #'
-#' The estimation criterion is the classification (complete-data) log-likelihood.
-#' Because the integrated shared-frailty term couples the labels of patients in the
-#' same group-by-component cell, the classification log-likelihood does not separate
-#' across patients, and the usual C-step of CEM—assigning each unit by its marginal
-#' posterior probability—is not available. The model is therefore fitted with an
-#' \strong{ICM-CEM} algorithm: a classification EM (CEM) algorithm (Celeux & Govaert,
-#' 1992) whose classification step is carried out by iterated conditional modes
-#' (ICM; Besag, 1986). Each label is set in turn to the mode of its full conditional
-#' distribution given the current labels of all other patients and the current
-#' parameter estimates, and the new label is used immediately. The ICM-CEM algorithm
-#' alternates between:
+#' \strong{Estimation criterion.} Following a classification maximum likelihood
+#' approach, the cluster labels are treated as unknown parameters, and the
+#' classification log-likelihood is maximized jointly with respect to the model
+#' parameters \eqn{\psi} and the partition of the patients into group-by-component
+#' cells. The mixture (observed-data) likelihood is not used, as it is computationally
+#' intractable for this model.
+#'
+#' \strong{ICM-CEM algorithm.} The classification log-likelihood is maximized by the
+#' Iterated Conditional Modes-Classification Expectation Maximization (ICM-CEM)
+#' algorithm, a block-coordinate ascent procedure that alternates two steps:
 #' \itemize{
-#'   \item \strong{ICM classification step}: Updating one hard assignment at a
-#'     time. Each update recomputes the joint group-by-component shared-frailty
-#'     contribution of both the source and the destination cells, so every accepted move
-#'     increases the classification log-likelihood.
-#'   \item \strong{M-step}: Updating mixture component parameters. Mixing proportions,
-#'     Gaussian and multinomial covariate parameters have closed-form updates given the
-#'     hard partition; the survival parameters of each component are refitted by
-#'     numerical maximization of the same component survival log-likelihood used by the
-#'     classification step. Refits are warm-started from the current estimates, and a
-#'     candidate that does not improve a component's contribution is rejected (the
-#'     previous estimates are retained).
+#'   \item \strong{ICM-type allocation step}: with the parameters held fixed, the labels
+#'     are updated one patient at a time. Patients in the same group-by-component cell
+#'     are dependent through their shared frailty, so the joint posterior distribution of
+#'     the labels is not available in closed form and the usual classification step of
+#'     CEM (Celeux & Govaert, 1992), which assigns each patient by its marginal posterior
+#'     probability, cannot be used. Following the iterated conditional modes principle
+#'     (Besag, 1986), each label is instead replaced by its conditional mode given the
+#'     current labels of all other patients: every component, including the current one,
+#'     is scored by the exact change in the classification log-likelihood, which
+#'     recomputes the integrated frailty term of both the source and the destination
+#'     cells, and the new label is used immediately. Patients are visited in the row
+#'     order of \code{data}. The current label is retained in case of ties, so a label
+#'     changes only if another component attains a strictly larger score (see
+#'     \code{move_tolerance} in \code{\link{control_EM}}). Sweeps over all patients are
+#'     repeated until a complete pass produces no label change, or until
+#'     \code{max_c_sweeps} sweeps have been performed.
+#'   \item \strong{Model parameters step (M-step)}: with the partition held fixed, the
+#'     classification log-likelihood splits into \eqn{G} component-specific terms. The
+#'     mixing proportions and the Gaussian and multinomial covariate parameters have
+#'     closed-form updates; the survival parameters \eqn{(\gamma_g, \beta_g, \theta_g)}
+#'     of each component are obtained by numerically maximizing the log-likelihood of a
+#'     parametric shared frailty model fitted to the patients assigned to that component,
+#'     with patients from the same group sharing a common frailty. Refits are
+#'     warm-started from the current estimates, and a candidate that does not improve a
+#'     component's contribution is rejected (the previous estimates are retained).
 #' }
 #'
-#' Every ICM update and every block of the M-step leaves the classification
-#' log-likelihood non-decreasing, so ICM-CEM is a monotone block-coordinate ascent
-#' algorithm that converges to a partial optimum: a partition that no single
-#' reassignment improves at the final parameters, together with parameters that locally
-#' maximise the classification log-likelihood given that partition. As with any
-#' CEM-type algorithm the solution is local, so multiple random starts are used.
+#' Each allocation update and each block of the M-step leaves the classification
+#' log-likelihood non-decreasing, so the objective is monotone across ICM-CEM
+#' iterations. Monotonicity does not guarantee convergence to a global maximum: the
+#' solution depends on the initial partition and, within the allocation step, on the
+#' visiting order. The algorithm stops when the relative change of the classification
+#' log-likelihood between two consecutive iterations falls below \code{tol}, or after
+#' \code{itermax} iterations (see \code{\link{control_EM}}).
 #'
-#' The \code{bic} element is a \emph{classification} BIC: \code{2 * loglik - d * log(N)}
-#' with the classification (not the observed-data marginal) log-likelihood and
-#' \code{d} the total number of parameters. As such it behaves like an ICL-type criterion
-#' and tends to favour fewer, well-separated components; comparisons across \code{G},
-#' baselines or frailties are internally consistent, but it is not the Schwarz BIC of the
-#' marginal mixture likelihood.
-#'
-#' The ICM classification step is monotone but converges to a coordinate-wise
-#' local optimum, and its endpoint may depend on the visiting order; multiple random
-#' starts are therefore recommended (\code{n_start} in \code{\link{control_EM}}, default 5),
-#' and the reported fit is the one with the highest classification log-likelihood among
-#' the non-degenerate starts. The classification log-likelihood has degenerate boundary
-#' solutions (components with too few events, or with runaway survival parameters);
-#' starts ending in such solutions are flagged and excluded from the selection, and the
-#' flags are reported in \code{start_summary}. The event floor and the runaway-parameter
-#' threshold are controlled by \code{minimum_component_events} and
+#' \strong{Initialization and multiple starts.} The first start uses the partition
+#' supplied in \code{class_init}. Caldera et al. (2025+) obtain initial partitions by
+#' running the k-prototypes algorithm (Huang, 1998), which extends k-means to mixed
+#' continuous and categorical data, on the covariates, exploiting the assumption that
+#' covariate distributions differ across components. Further starts (\code{n_start} in
+#' \code{\link{control_EM}}, default 5) use random partitions, and the reported fit is
+#' the one with the highest classification log-likelihood among the non-degenerate
+#' starts. The classification log-likelihood has degenerate boundary solutions
+#' (components with too few events, or with runaway survival parameters); starts ending
+#' in such solutions are flagged and excluded from the selection, and the flags are
+#' reported in \code{start_summary}. The event floor and the runaway-parameter threshold
+#' are controlled by \code{minimum_component_events} and
 #' \code{runaway_parameter_limit} in \code{\link{control_EM}}.
+#'
+#' \strong{Model selection.} The \code{bic} element is the BIC-type penalized
+#' classification likelihood criterion
+#' \deqn{\mathrm{BIC}_{CL} = 2 \, \ell(\hat\psi; \hat{\mathcal{R}}) - d \log N,}
+#' where \eqn{\ell(\hat\psi; \hat{\mathcal{R}})} is the classification log-likelihood
+#' evaluated at the parameter estimates and at the partition returned by the ICM-CEM
+#' algorithm, \eqn{N} is the number of patients, and
+#' \deqn{d = Gm + G \frac{p(p+3)}{2} + G \sum_{r=1}^{q} (k_r - 1) + Gb + Gf + G - 1}
+#' is the number of free parameters, with \eqn{m} the number of regression coefficients,
+#' \eqn{p} the number of Gaussian covariates, \eqn{k_r} the number of levels of the
+#' \eqn{r}-th of the \eqn{q} categorical covariates, \eqn{b} the number of baseline
+#' parameters and \eqn{f} the number of frailty parameters (0 if
+#' \code{frailty = "none"}). Larger values are preferred, and the criterion can be used to
+#' select \code{G}, \code{baseline} and \code{frailty}. Since the same classification
+#' log-likelihood is maximized for estimation and penalized for model comparison,
+#' \eqn{\mathrm{BIC}_{CL}} corresponds to the CLA-CLA criterion of Cerioli et al.
+#' (2018). It is neither the Schwarz BIC, which penalizes the mixture log-likelihood,
+#' nor the ICL of Biernacki et al. (2000), in which the parameters maximize the mixture
+#' likelihood and the classification likelihood enters only the definition of the
+#' criterion.
 #'
 #' The package fits the component-specific frailty models with its own optimizer
 #' (see \code{\link{control_parfm}}); it does not depend on the \code{parfm} package at
@@ -185,6 +244,10 @@
 #' Besag, J. (1986). On the statistical analysis of dirty pictures.
 #' \emph{Journal of the Royal Statistical Society: Series B}, 48(3), 259-302.
 #'
+#' Biernacki, C., Celeux, G. & Govaert, G. (2000). Assessing a mixture model for
+#' clustering with the integrated completed likelihood. \emph{IEEE Transactions on
+#' Pattern Analysis and Machine Intelligence}, 22(7), 719-725.
+#'
 #' Caldera, Cappozzo, Masci, Forlani, Antonelli, Leoni, Paganoni, Ieva (2025+).
 #' Cluster-weighted modeling of lifetime hierarchical data for profiling COVID-19
 #' heart failure patients. \url{https://arxiv.org/abs/2507.12230}
@@ -192,6 +255,14 @@
 #' Celeux, G. & Govaert, G. (1992). A classification EM algorithm for clustering
 #' and two stochastic versions. \emph{Computational Statistics & Data Analysis},
 #' 14(3), 315-332.
+#'
+#' Cerioli, A., García-Escudero, L. A., Mayo-Iscar, A. & Riani, M. (2018). Finding the
+#' number of normal groups in model-based clustering via constrained likelihoods.
+#' \emph{Journal of Computational and Graphical Statistics}, 27(2), 404-416.
+#'
+#' Huang, Z. (1998). Extensions to the k-means algorithm for clustering large data
+#' sets with categorical values. \emph{Data Mining and Knowledge Discovery}, 2(3),
+#' 283-304.
 #'
 #' Munda, M., Rotolo, F., Legrand, C. (2012). Parfm: parametric frailty models in R.
 #' \emph{Journal of Statistical Software}, 51(11), 1-30.

@@ -19,12 +19,14 @@ control_EM(
 )
 }
 \arguments{
-\item{itermax}{Integer. Maximum number of CEM iterations per start.
+\item{itermax}{Integer. Maximum number of ICM-CEM iterations per start.
 Default is 1000.}
 
 \item{tol}{Numeric. Convergence tolerance for the relative change in
-the classification log-likelihood. The algorithm stops when the
-relative change is smaller than \code{tol}. Default is 1e-08.}
+the classification log-likelihood between two consecutive ICM-CEM
+iterations, computed as \eqn{|\ell^{(k+1)} - \ell^{(k)}| / (1 + |\ell^{(k)}|)}.
+The algorithm stops when the relative change is smaller than or equal
+to \code{tol}. Default is 1e-08.}
 
 \item{tol_zero_var}{Numeric. Tolerance for detecting degenerate
 covariance matrices of the Gaussian cluster-weighted covariates.
@@ -44,18 +46,18 @@ keeps rounding-level "improvements" of the incrementally maintained
 cell sums from causing spurious moves or cycling. Default is 1e-9.}
 
 \item{max_c_sweeps}{Integer. Maximum number of sequential
-classification sweeps per CEM iteration. Default is 100.}
+classification sweeps per ICM-CEM iteration. Default is 100.}
 
 \item{minimum_component_size}{Integer. Minimum number of patients per
-component enforced during the classification sweeps; the conditional
-step never moves a patient if that would leave the current component
-with fewer than this many patients. Default is 1, i.e. empty
-components are prevented.}
+component enforced during the classification sweeps; the ICM
+classification step never moves a patient if that would leave the
+current component with fewer than this many patients. Default is 1,
+i.e. empty components are prevented.}
 
 \item{minimum_component_events}{Integer or NULL. Minimum number of
 events per component, enforced like \code{minimum_component_size}:
-the conditional step never moves a patient if that would leave the
-current component with fewer than this many events. This prevents
+the ICM classification step never moves a patient if that would leave
+the current component with fewer than this many events. This prevents
 zero-event (or near-zero-event) components, whose survival-parameter
 estimates run away to degenerate boundary solutions. NULL (default)
 means the number of survival parameters of one component (frailty
